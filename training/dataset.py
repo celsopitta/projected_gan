@@ -23,6 +23,85 @@ except ImportError:
     pyspng = None
 
 #----------------------------------------------------------------------------
+class SimpleDataSet2:
+    def __init__(self):
+        """Init function should not do any heavy lifting, but
+            must initialize how many items are available in this data set.
+        """
+        
+        self.images = torch.load("/data/models/dino/features/train_images.pth").numpy()
+        self.labels = torch.load("/data/models/dino/features/trainfeat.pth").numpy()
+
+        self.image_shape = self.images[0].shape
+        self.label_shape = self.labels[0].shape
+
+    def __len__(self):
+        """return number of points in our dataset"""
+        return len(self.images)
+    def __getitem__(self, idx):
+        """ Here we have to return the item requested by `idx`
+            The PyTorch DataLoader class will use this method to make an iterable for
+            our training or validation loop.
+        """
+        img = self.images[idx]
+        label = self.labels[idx]
+        return img.copy(), label.copy()
+
+class SimpleDataSet(torch.utils.data.Dataset):
+    def __init__(self,X,Y, name='Nome'):
+        self.X = X.cpu().numpy()                           # set data
+        self.Y = Y.cpu().numpy()                           # set lables
+        self._name = name
+
+
+    def __len__(self):
+        return len(self.X)                   # return length
+
+    def __getitem__(self, idx):
+        return self.X[idx].copy(), self.Y[idx].copy()
+    
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def image_shape(self):
+        return list(self.X.shape[1:])
+
+    @property
+    def num_channels(self):
+        assert len(self.image_shape) == 3 # CHW
+        return self.image_shape[0]
+
+    @property
+    def resolution(self):
+        assert len(self.image_shape) == 3 # CHW
+        assert self.image_shape[1] == self.image_shape[2]
+        return self.image_shape[1]
+
+    @property
+    def label_shape(self):
+       
+        return list(self.Y.shape[1:])
+
+    @property
+    def label_dim(self):
+        assert len(self.label_shape) == 1
+        return self.label_shape[0]
+
+    @property
+    def has_labels(self):
+        return any(x != 0 for x in self.label_shape)
+
+    @property
+    def has_onehot_labels(self):
+        return False
+
+    def get_label(self, idx):
+
+        return self.Y[idx].copy()
+
+
 
 class Dataset(torch.utils.data.Dataset):
     def __init__(self,

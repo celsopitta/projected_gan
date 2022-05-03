@@ -88,9 +88,11 @@ class ProjectedGANLoss(Loss):
             # Dmain: Maximize logits for real images.
             with torch.autograd.profiler.record_function('Dreal_forward'):
                 real_img_tmp = real_img.detach().requires_grad_(False)
+                #self.D.save_features = True
                 real_logits = self.run_D(real_img_tmp, real_c, blur_sigma=blur_sigma)
+                #self.D.save_features = False
                 loss_Dreal = (F.relu(torch.ones_like(real_logits) - real_logits)).mean()
-
+                
                 # Logging
                 training_stats.report('Loss/scores/real', real_logits)
                 training_stats.report('Loss/signs/real', real_logits.sign())

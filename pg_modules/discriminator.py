@@ -164,6 +164,8 @@ class ProjectedDiscriminator(torch.nn.Module):
             resolutions=self.feature_network.RESOLUTIONS,
             **backbone_kwargs,
         )
+        self.real_features = []
+        self.save_features = False
 
     def train(self, mode=True):
         self.feature_network = self.feature_network.train(False)
@@ -180,7 +182,28 @@ class ProjectedDiscriminator(torch.nn.Module):
         if self.interp224:
             x = F.interpolate(x, 224, mode='bilinear', align_corners=False)
 
+        # aqui. em vez de trabalhar com a imagem, o discriminador trabalha com uma projecao aleatoria dos features do efficient_net!!
+        # neste caso "quase" sempre vai convergir.
+        # da pra garantir isso trocando o projetor pelo projetor do OT!!!
+
+        # aqui pegamos a imagem, transformamos nos features multiscale passamos para o 
         features = self.feature_network(x)
+
+        #if self.save_features:
+        #    self.real_features.append(features['0'].cpu())
+
         logits = self.discriminator(features, c)
 
         return logits
+
+# SMART GENERATOR
+# JA QUE EH GARANTIDO QUE DA PRA GERAR NOVOS FEATURE MAPS DENTRO DA DISTRIBUICAO VALIDA
+# AO SABER TODOS OS FEATURES DO CONJUNTO DE TREINO EU POSSO GERAR INFINITOS EXEMPLOS INTERPOLANDO NO ESPACO
+# DOS FEATURES USANDO O OT
+
+# ASSIM EU POSSO TIRAR OS AUGMENTATIONS DO DISCRIMINATOR E POSSO GERAR OUTRAS IMAGENS AO INVEZ DISSO
+# fazer um novo feature_network fake:
+#
+#   1 - pega as imagens de treino, gera todos os features em todas as escalas
+#   2 - treina 1 OT pra cada feature map
+#   3 - 

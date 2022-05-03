@@ -1,4 +1,5 @@
 import functools
+from pickle import decode_long
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -31,8 +32,6 @@ def NormLayer(c, mode='batch'):
         return nn.BatchNorm2d(c)
 
 
-### Activations
-
 
 class GLU(nn.Module):
     def forward(self, x):
@@ -48,17 +47,37 @@ class Swish(nn.Module):
 
 
 ### Upblocks
+ 
 
-
-class InitLayer(nn.Module):
-    def __init__(self, nz, channel, sz=4):
+class InitLayerDino(nn.Module):
+    def __init__(self, nz, channel, sz=4, do_norm=True):
         super().__init__()
 
         self.init = nn.Sequential(
-            convTranspose2d(nz, channel*2, sz, 1, 0, bias=False),
-            NormLayer(channel*2),
-            GLU(),
+             convTranspose2d(nz, channel , sz, 1, 0)
         )
+
+    def forward(self, noise):
+        noise = noise.view(noise.shape[0], -1, 1, 1)
+        return self.init(noise)
+
+class InitLayer(nn.Module):
+    def __init__(self, nz, channel, sz=4, do_norm=True):
+        super().__init__()
+
+        if do_norm:
+            self.init = nn.Sequential(
+                convTranspose2d(nz, channel*2, sz, 1, 0, bias=False),
+                NormLayer(channel*2),
+                GLU(),
+            )
+        else:
+            self.init = nn.Sequential(
+                convTranspose2d(nz, channel*2, sz, 1, 0, bias=False),
+                #NormLayer(channel*2),
+                GLU(),
+            )
+
 
     def forward(self, noise):
         noise = noise.view(noise.shape[0], -1, 1, 1)

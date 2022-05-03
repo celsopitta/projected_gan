@@ -28,9 +28,12 @@ from torch_utils import misc
 from torch_utils import training_stats
 from torch_utils.ops import conv2d_gradfix
 from torch_utils.ops import grid_sample_gradfix
+from torch.utils.data import TensorDataset, DataLoader
 
 import legacy
 from metrics import metric_main
+from training.dataset import SimpleDataSet
+
 
 #----------------------------------------------------------------------------
 
@@ -40,7 +43,7 @@ def setup_snapshot_image_grid(training_set, random_seed=0):
     gh = np.clip(4320 // training_set.image_shape[1], 4, 32)
 
     # No labels => show random subset of training samples.
-    if not training_set.has_labels:
+    if not training_set.has_labels or True:
         all_indices = list(range(len(training_set)))
         rnd.shuffle(all_indices)
         grid_indices = [all_indices[i % len(all_indices)] for i in range(gw * gh)]
@@ -140,10 +143,12 @@ def training_loop(
     __PL_MEAN__ = torch.zeros([], device=device)
     best_fid = 9999
 
+
     # Load training set.
     if rank == 0:
         print('Loading training set...')
-    training_set = dnnlib.util.construct_class_by_name(**training_set_kwargs) # subclass of training.dataset.Dataset
+    #training_set = dnnlib.util.construct_class_by_name(**training_set_kwargs) # subclass of training.dataset.Dataset
+    training_set = SimpleDataSet(torch.load("/data/models/dino/features/train_images.pth"),torch.load("/data/models/dino/features/trainfeat.pth"))
     training_set_sampler = misc.InfiniteSampler(dataset=training_set, rank=rank, num_replicas=num_gpus, seed=random_seed)
     training_set_iterator = iter(torch.utils.data.DataLoader(dataset=training_set, sampler=training_set_sampler, batch_size=batch_size//num_gpus, **data_loader_kwargs))
     if rank == 0:
@@ -270,18 +275,42 @@ def training_loop(
         progress_fn(cur_nimg // 1000, total_kimg)
     if hasattr(loss, 'pl_mean'):
         loss.pl_mean.copy_(__PL_MEAN__)
+    
+
+
+    z_type = 'Noise'
+
+    #celso
+    if 'DINO' in z_type:
+        omt_P = torch.load('/data/models/dino/features/P.pth').to(device)
+        omt_I_gen = torch.load('/data/models/dino/features/I_gen.pth').to(device)
+        
+        omt_I_gen = omt_I_gen.permute(1,0)
+
     while True:
 
         with torch.autograd.profiler.record_function('data_fetch'):
+            #assert len(phases) * batch_size <= omt_I_gen.shape[1] 
             phase_real_img, phase_real_c = next(training_set_iterator)
             phase_real_img = (phase_real_img.to(device).to(torch.float32) / 127.5 - 1).split(batch_gpu)
             phase_real_c = phase_real_c.to(device).split(batch_gpu)
-            all_gen_z = torch.randn([len(phases) * batch_size, G.z_dim], device=device)
+            
+            if 'DINO' in z_type:
+                omt_I_gen=omt_I_gen[torch.randperm(omt_I_gen.size()[0])]
+                rand_w = torch.rand([omt_I_gen.shape[0],1],dtype=torch.float32).to(device) 
+                P_gen = torch.mul(omt_P[omt_I_gen[:,0],:], 1 - rand_w) + torch.mul(omt_P[omt_I_gen[:,1],:], rand_w).to(device)
+          
+                all_gen_z = P_gen[0:len(phases) * batch_size,:]
+            else:
+
+                all_gen_z = torch.randn([len(phases) * batch_size, G.z_dim], device=device)
+
             all_gen_z = [phase_gen_z.split(batch_gpu) for phase_gen_z in all_gen_z.split(batch_size)]
             all_gen_c = [training_set.get_label(np.random.randint(len(training_set))) for _ in range(len(phases) * batch_size)]
             all_gen_c = torch.from_numpy(np.stack(all_gen_c)).pin_memory().to(device)
             all_gen_c = [phase_gen_c.split(batch_gpu) for phase_gen_c in all_gen_c.split(batch_size)]
 
+        
         # Execute training phases.
         for phase, phase_gen_z, phase_gen_c in zip(phases, all_gen_z, all_gen_c):
             if batch_idx % phase.interval != 0:
@@ -332,6 +361,10 @@ def training_loop(
         # Update state.
         cur_nimg += batch_size
         batch_idx += 1
+
+        #if len(loss.D.real_features) > 0 and cur_nimg > 750:
+        #    stacked_features = torch.stack(loss.D.real_features)
+        #    torch.save(stacked_features,'features_out0.pt')
 
         # Perform maintenance tasks once per tick.
         done = (cur_nimg >= total_kimg * 1000)

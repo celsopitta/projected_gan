@@ -19,6 +19,8 @@ import torch
 import dnnlib
 from tqdm import tqdm
 
+from training.dataset import SimpleDataSet
+
 #----------------------------------------------------------------------------
 
 class MetricOptions:
@@ -65,6 +67,7 @@ def iterate_random_labels(opts, batch_size):
             yield c
     else:
         dataset = dnnlib.util.construct_class_by_name(**opts.dataset_kwargs)
+        dataset = SimpleDataSet(torch.load("/data/models/dino/features/train_images.pth"),torch.load("/data/models/dino/features/trainfeat.pth"))
         while True:
             c = [dataset.get_label(np.random.randint(len(dataset))) for _i in range(batch_size)]
             c = torch.from_numpy(np.stack(c)).pin_memory().to(opts.device)

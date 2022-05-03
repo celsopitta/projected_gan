@@ -96,7 +96,7 @@ class F_RandomProj(nn.Module):
         im_res=256,
         cout=64,
         expand=True,
-        proj_type=2,  # 0 = no projection, 1 = cross channel mixing, 2 = cross scale mixing
+        proj_type=2,  # 0 = no projection, 1 = cross channel mixing, 2 = cross scale mixing, 3 = TODO: COLOCAR OT PROJECTION CELSO
         **kwargs,
     ):
         super().__init__()
@@ -111,7 +111,8 @@ class F_RandomProj(nn.Module):
 
     def forward(self, x):
         # predict feature maps
-        out0 = self.pretrained.layer0(x)
+
+        out0 = self.pretrained.layer0(x) 
         out1 = self.pretrained.layer1(out0)
         out2 = self.pretrained.layer2(out1)
         out3 = self.pretrained.layer3(out2)
